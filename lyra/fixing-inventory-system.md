@@ -90,14 +90,35 @@ Once that's done, open up the `GA_Interaction_Collect` gameplay ability again an
 
 Now when you open the InventoryTestMap and collect a rock, open your inventory (default 'I') and you should notice you now have two green squares for items. One of these is your brand new rock.
 
-## 4. Toasts don't trigger - Broadcast messages not received by server
+## 4. Inventory doesn't toggle off
+It might be arguable if this one is a hole, since you can still close the inventory by clicking on the widget and pressing escape (configured as a default back button for the Common UI components), but if you're like me it will still be enough for a minor inconvenience to infuriate you while testing.
+
+The Inventory UI element is displayed by the `GA_ToggleInventory` ability, with all the logic implemented in its parent class `GAB_ShowWidget_WhenInputPressed`. We're going to change the parent class into a toggle so that activating the ability again will hide the widget.
+
+To do this we need to add a `WaitInputPress` node after the widget has been displayed that will then deactivate the displayed widget, like so:  
+![image](https://user-images.githubusercontent.com/8943296/177229174-fbdbe303-8169-4f67-8442-8dd7e345d881.png)  
+
+If you press play now, you will discover that the widget flickers as it rapidly appears and disappears. The culprit this time is the InputAction associated with our ability. Open `IA_ToggleInventory`.
+
+Input Actions provide a lot of customization to inputs that without the `EnhancedInputComponent` would need to be implemented through code. For example, the Input Action's `Trigger` property can change under what circumstances functions associated with an Input Action will actually be executed (e.g. when held, when tapped etc). The default behaviour without any triggers defined is to use the trigger `Down`, which will activate continuously while the input is held. A more appropriate trigger for this action might be `Pressed`, which will trigger only once when the input is activated. Change it to something like the following:  
+![image](https://user-images.githubusercontent.com/8943296/177229496-01aa1366-67d6-4447-9b87-53956eb38097.png)  
+
+Now the Inventory doesn't flicker, but we can't get rid of it! What gives? Well it turns out that when a `CommonActivatableWidget` is displayed, it defaults to blocking game input. Fortunately there is an intended way around this, it just once again was not implemented.
+
+While the `GAB_ShowWidget_WhenInputPressed` has no functional usages, the similar `GAB_ShowWidget_WhileInputHeld` has several such as the `W_MatchScoreboard_CP`. Opening that scoreboard, we can see that it inherits from `LyraActivatableWidget`, a `CommonActivatableWidget` with a few extra properties for handling input. In particular the `InputConfig` can be used to determine the input mode used when this widget is active.
+
+Open your `W_InventoryScreen` and reparent it to the `LyraActivatableWidget` class (open the widget graph, select `Class Settings` then change `Parent Class`). Then in its `Class Defaults` change `Input Config` to either `Game` or `Game and Menu`.
+
+Now when you play, you should have a toggleable inventory widget!
+
+## 5. Toasts don't trigger - Broadcast messages not received by server
 Coming soon™
 
-## 5. Item tiles in inventory don't have icon
+## 6. Item tiles in inventory don't have icon
 Coming soon™
 
-## 6. Item tiles in inventory don't have quantity
+## 7. Item tiles in inventory don't have quantity
 Coming soon™
 
-## 7. Duplicate tile warnings
+## 8. Duplicate tile warnings
 Coming soon™
