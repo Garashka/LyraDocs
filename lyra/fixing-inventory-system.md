@@ -89,3 +89,15 @@ Once that's done, open up the `GA_Interaction_Collect` gameplay ability again an
 ![image](https://user-images.githubusercontent.com/8943296/177227504-71c6200e-50fc-4d31-aa92-2ee403fa57aa.png)
 
 Now when you open the InventoryTestMap and collect a rock, open your inventory (default 'I') and you should notice you now have two green squares for items. One of these is your brand new rock.
+
+## 4. Toasts don't trigger - Broadcast messages not received by server
+Coming soon™
+
+## 5. Item tiles in inventory don't have icon
+Coming soon™
+
+## 6. Item tiles in inventory don't have quantity
+Coming soon™
+
+## 7. Duplicate tile warnings
+Coming soon™
