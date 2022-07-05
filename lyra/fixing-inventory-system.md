@@ -111,10 +111,23 @@ Open your `W_InventoryScreen` and reparent it to the `LyraActivatableWidget` cla
 
 Now when you play, you should have a toggleable inventory widget!
 
-## 5. Toasts don't trigger - Broadcast messages not received by server
-Coming soon™
+## 5. Item tiles in inventory don't have icon
+Well this one's just another example of good-old unfinished prototyping.
 
-## 6. Item tiles in inventory don't have icon
+Now, all we have left to do is give our rock an icon. Lyra uses a composable structure for its items. This means that rather than having all properties configured for every inventory item defined, you pick and choose which properties it has available by adding one or more `ULyraInventoryItemFragment`'s to each `ULyraInventoryItemDefinition`.
+
+To add an icon to our rock, we're going to need to add one of these fragments. Open up the `TestID_Rock` blueprint file and add a new `Inventory Fragment Quick Bar Icon`. Set its `Brush` to any texture you like.
+
+We're not done yet. An item is represented in the inventory with a `W_InventoryTile`. If you open this you're going to find it's completely blank, except for a `OnListItemObjectSet` event with no implementation. This is what we need to complete.
+
+`OnListItemObjectSet` is called when the tile is updated within its parent container and receives an object which the tile is meant to represent. If you open the parent (`W_InventoryGrid`) and look at its `Construct` function you can see it adds each item in our inventory to the `TileViewWidget` as a `ULyraInventoryItemInstance`.So if we return to our `W_InventoryTile` and cast the ListItemObject to a `ULyraInventoryItemInstance`, we should be able to retrieve any `InventoryFragment_QuickBarIcon` attached to an item instance.
+
+If you've dug around through other parts of Lyra, you may have seen fragments retrieved from items using a `FindFragmentByClass` function. This is implemented in C++ and as suggested by the name, returns the first fragment it finds matching the given class. Using this we can retrieve the QuickBarIcon we implemented earlier and set our brush. You should end up with something like this:
+![image](https://user-images.githubusercontent.com/8943296/177232189-93c98388-b791-4808-ba85-9436b8b8a5af.png)
+
+Now when you hit play and collect a rock, you should find it has a texture in your inventory (as well as a default pistol that is spawned by default and had been a mysterious green square until now).
+
+## 6. Toasts don't trigger - Broadcast messages not received by server
 Coming soon™
 
 ## 7. Item tiles in inventory don't have quantity
