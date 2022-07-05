@@ -53,7 +53,7 @@ There are two possible ways this implementation was intended to work:
 
 In either case, there is a much simpler solution available to us with a little C++. The `GA_Interaction_Collect` ability already receives the target actor in its payload, so we can instead retrieve the `IPickupable` interface directly from here.
 
-Open your `IPickupable.h` header file and look for the UPickupableStatics class file. Add the following as a public function declaration:
+Open your `IPickupable.h` header file and look for the UPickupableStatics class. Add the following as a public function declaration:
 ```
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "Ability"))
 	static TScriptInterface<IPickupable> GetIPickupableFromTargetObject(AActor* Target);
