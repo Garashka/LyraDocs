@@ -120,18 +120,72 @@ To add an icon to our rock, we're going to need to add one of these fragments. O
 
 We're not done yet. An item is represented in the inventory with a `W_InventoryTile`. If you open this you're going to find it's completely blank, except for a `OnListItemObjectSet` event with no implementation. This is what we need to complete.
 
-`OnListItemObjectSet` is called when the tile is updated within its parent container and receives an object which the tile is meant to represent. If you open the parent (`W_InventoryGrid`) and look at its `Construct` function you can see it adds each item in our inventory to the `TileViewWidget` as a `ULyraInventoryItemInstance`.So if we return to our `W_InventoryTile` and cast the ListItemObject to a `ULyraInventoryItemInstance`, we should be able to retrieve any `InventoryFragment_QuickBarIcon` attached to an item instance.
+`OnListItemObjectSet` is called when the tile is updated within its parent container and receives an object which the tile is meant to represent. If you open the parent (`W_InventoryGrid`) and look at its `Construct` function you can see it adds each item in our inventory to a `CommonTileView` as a `ULyraInventoryItemInstance`.So if we return to our `W_InventoryTile` and cast the ListItemObject to a `ULyraInventoryItemInstance`, we should be able to retrieve any `InventoryFragment_QuickBarIcon` attached to an item instance.
 
 If you've dug around through other parts of Lyra, you may have seen fragments retrieved from items using a `FindFragmentByClass` function. This is implemented in C++ and as suggested by the name, returns the first fragment it finds matching the given class. Using this we can retrieve the QuickBarIcon we implemented earlier and set our brush. You should end up with something like this:
 ![image](https://user-images.githubusercontent.com/8943296/177232189-93c98388-b791-4808-ba85-9436b8b8a5af.png)
 
 Now when you hit play and collect a rock, you should find it has a texture in your inventory (as well as a default pistol that is spawned by default and had been a mysterious green square until now).
 
-## 6. Toasts don't trigger - Broadcast messages not received by server
+## 6. Toasts don't trigger/Inventory doesn't update while open
+One problem you might not have noticed is that when playing as Standalone or a Listen Server your inventory will not currently update if items are added to it while the inventory is open, but if you open and close it it will contain all items. Similarly on Standalone/Listen Server you will not receive the inventory toast intended to appear whenever an item is added to your inventory.
+
+In both these cases we expect updates to be handled by the following Async task:  
+![image](https://user-images.githubusercontent.com/8943296/177278475-6ae9fc5c-711b-40cf-9fd7-5766e9f7d6d2.png)  
+We know the items are added to our inventory, so time to go and check the event is dispatched correctly. Time for some more C++.
+
+Searching for the GameplayTag we are subscribed to (`Lyra.Inventory.Message.StackChanged`) we can find a single usage of it, within the `LyraInventoryManagerComponent.cpp` file where it is declared as a `FNativeGameplayTag` using a macro. This native tag is then used by the `FLyraInventoryList::BroadcastChangeMessage` function. Alright, looks good so far. If you've dug around in Lyra elsewhere you know this `MessageSystem` is being used successfully, so our issue must be here. You could add a breakpoint here and see if it's the `BroadcastChangeMessage` function is ever hit, but it won't be.
+
+Checking where the `BroadcastChangeMessage` function is called, you might notice a pattern. It's called in the `PreReplicatedRemove`, `PreReplicatedAdd` and `PostReplicatedChange` functions. These are all related to replication provided by the `FFastArraySerializer` structure our InventoryList inherits from, and if you've done much with replication before you can probably guess at this point; they are only called on the remote clients. You could confirm this by testing the feature while running as a client.
+
+To fix this then, we need to ensure that `BroadcastChangeMessage` is also called when we are modifying the inventory list on a Listen Server. The functionality provided to modify the array is again pretty barebones (and some of it not even implimented correctly - looking at you `ConsumeItemsByDefinition`), so for demonstration purposes we'll correct the `FLyraInventoryList::AddEntry(TSubclassOf<ULyraInventoryItemDefinition> ItemDef, int32 StackCount)` function. Add a call to `BroadcastChangeMessage` after the array is modified and marked as dirty, and you should end up with something like this:
+
+```
+ULyraInventoryItemInstance* FLyraInventoryList::AddEntry(TSubclassOf<ULyraInventoryItemDefinition> ItemDef, int32 StackCount)
+{
+	ULyraInventoryItemInstance* Result = nullptr;
+
+	check(ItemDef != nullptr);
+ 	check(OwnerComponent);
+
+	AActor* OwningActor = OwnerComponent->GetOwner();
+	check(OwningActor->HasAuthority());
+
+	FLyraInventoryEntry& NewEntry = Entries.AddDefaulted_GetRef();
+	NewEntry.Instance = NewObject<ULyraInventoryItemInstance>(OwnerComponent->GetOwner());
+	NewEntry.Instance->SetItemDef(ItemDef);
+	for (ULyraInventoryItemFragment* Fragment : GetDefault<ULyraInventoryItemDefinition>(ItemDef)->Fragments)
+	{
+		if (Fragment != nullptr)
+		{
+			Fragment->OnInstanceCreated(NewEntry.Instance);
+		}
+	}
+	NewEntry.StackCount = StackCount;
+	Result = NewEntry.Instance;
+	
+	MarkItemDirty(NewEntry);
+
+	BroadcastChangeMessage(NewEntry, 0, NewEntry.StackCount);
+	
+	return Result;
+}
+```
+Now compile, re-open the test map and try collecting an item with your inventory window open. You should now see the items added to your inventory as you collect them, as well as the toasts.
+
+## 7. Duplicate tile warnings
+If you open and close your inventory multiple times before collecting an item, you might notice the following warning in your output log: `LogScript: Warning: Script Msg: Cannot add duplicate item into ListView.`. This one's an easy fix.
+
+Remember that Async task we use to listen to change events in the previous step? Well it turns out they don't clean always clean themselves up. Each time you open your inventory, a new `ListenForGameplayMessages` task is created. However when you close the inventory it is not destroyed. Because of this, for each time you have opened your inventory this play session, it will attempt to add a separate tile to or InventoryGrid, causing the above warning.
+
+To resolve this open `W_InventoryGrid` and promote the `ListenForGameplayTask`'s `AsyncAction` pin to a variable. This stores a reference to the task. Then override the Destruct function of the widget and cancel that task. This will cause our task to be cleaned up every time the inventory is closed. The result should look something like this:  
+![image](https://user-images.githubusercontent.com/8943296/177283644-3f842211-2e3e-4398-a3da-acd1fff181f7.png)  
+The same will need to be done to the `W_ItemAcquiredList` widget.
+
+
+## 8. Item tiles in inventory don't have quantity
 Coming soon™
 
-## 7. Item tiles in inventory don't have quantity
-Coming soon™
-
-## 8. Duplicate tile warnings
-Coming soon™
+# Limitations
+## No manual re-ordering of tile widgets
+The `CommonTileView` widget doesn't appear to support manual ordering of widgets. This is going to be an issue for any inventory system that requires such behaviour (e.g. Factorio style).
