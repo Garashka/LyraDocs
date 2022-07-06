@@ -152,7 +152,63 @@ To resolve this open `W_InventoryGrid` and promote the `ListenForGameplayTask`'s
 The same will need to be done to the `W_ItemAcquiredList` widget.
 
 ## 8. Item tiles in inventory don't have quantity
-Coming soon™
+Okay, if you've been following along you should have the Lyra Inventory at the starting line of what an inventory should be. There's one more thing that the majority of inventory systems are going to want, before we start getting into project specifics.
+
+If you've looked through the C++ much, you may have noticed the storage structure for inventory items (`FLyraInventoryItem`) has a StackCount property to track the number of items in each stack. Currently this isn't exposed to Blueprints and so we are unable to display it, so we're going to need to do some C++.
+
+There's multiple ways you could do this - you could for example update the visibility of the StackCount property to be `BlueprintReadOnly` and pass a `FLyraInventoryItem` from your `W_InventoryGrid` to each `W_InventoryTile` (rather than the `ULyraInventoryItem` that is currently used). This might be a better approach if you were to scrap the current widget grid, but unfortunately this won't work so well with the `CommonTileView` currently used as the `AddItem` function used to add tiles only accepts UObjects.
+
+Instead we're going to take some inspiration from Lyra's handling of ammo counts. Open your `LyraInventoryManagerComponent.cpp` file and add the following near the top, just below the existing `UE_DEFINE_GAMEPLAY_TAG_STATIC` we will define a new gameplay tag that will be used to represent the stack count of each item by adding the following:
+```UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Lyra_Inventory_Item_Count, "Lyra.Inventory.Item.Count");```
+
+Finally inside the `FLyraInventoryList::AddEntry(TSubclassOf<ULyraInventoryItemDefinition> ItemDef, int32 StackCount)` function add the following line after the `NewEntry.Instance` property is assigned:
+`NewEntry.Instance->AddStatTagStack(TAG_Lyra_Inventory_Item_Count, StackCount);`
+
+Your end result should be something like this:
+```
+
+ULyraInventoryItemInstance* FLyraInventoryList::AddEntry(TSubclassOf<ULyraInventoryItemDefinition> ItemDef, int32 StackCount)
+{
+	ULyraInventoryItemInstance* Result = nullptr;
+
+	check(ItemDef != nullptr);
+ 	check(OwnerComponent);
+
+	AActor* OwningActor = OwnerComponent->GetOwner();
+	check(OwningActor->HasAuthority());
+
+
+	FLyraInventoryEntry& NewEntry = Entries.AddDefaulted_GetRef();
+	NewEntry.Instance = NewObject<ULyraInventoryItemInstance>(OwnerComponent->GetOwner());  //@TODO: Using the actor instead of component as the outer due to UE-127172
+	NewEntry.Instance->SetItemDef(ItemDef);
+	for (ULyraInventoryItemFragment* Fragment : GetDefault<ULyraInventoryItemDefinition>(ItemDef)->Fragments)
+	{
+		if (Fragment != nullptr)
+		{
+			Fragment->OnInstanceCreated(NewEntry.Instance);
+		}
+	}
+	NewEntry.StackCount = StackCount;
+	// Add item count as a GameplayTag so it can be retrieved from the ULyraInventoryItemInstance
+	NewEntry.Instance->AddStatTagStack(TAG_Lyra_Inventory_Item_Count, StackCount);
+	
+	Result = NewEntry.Instance;
+
+	MarkItemDirty(NewEntry);
+
+	BroadcastChangeMessage(NewEntry, 0, NewEntry.StackCount);
+	
+	return Result;
+}
+```
+
+Now press compile.
+
+Lastly, we need to update the `W_InventoryTile` widget to display this quantity. Currently there is no text component to display this, so your first step is to add one. Then, in the `OnListItemObjectSet` function retrieve the quantity from our `ULyraInventoryItemInstance` using `GetStatTagStackCount` (using the same tag we just defined in C++ `Lyra.Inventory.Item.Count`) and set the text value of your text component. You should end up with something like this:
+
+![image](https://user-images.githubusercontent.com/8943296/177464902-ce40564b-56fc-43dc-af65-c01b8ba3f0cc.png)
+
+Now to test this, start your game and pick up an item. Note that items will not currently combine into the same stack, so if you want to confirm the quantity is displayed correctly for higher quantities you will need to increase the `Stack Count` property in the `Static Inventory` template attached to your level's rock-cubes.
 
 # Limitations
 ## No manual re-ordering of tile widgets
