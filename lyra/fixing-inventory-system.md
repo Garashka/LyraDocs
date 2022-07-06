@@ -51,42 +51,11 @@ There are two possible ways this implementation was intended to work:
 1. The instanced ability would belong to the interactible object, thus the CurrentActorInfo would contain the `IPickupable` interface as required. However that would result in a lot of rather useless ASC's in any sizable game.
 2. The interact ability is triggered by an event (`TriggerInteraction` in `LyraGameplayAbility_Interact.cpp`) in which they construct a new `ActorInfo` instance and pass it to the `TriggerAbilityFromGameplayEvent`. It is possible they expected activating the ability in this method to update the instance's `CurrentActorInfo`. Unfortunately it doesn't work like this.
 
-In either case, there is a much simpler solution available to us with a little C++. The `GA_Interaction_Collect` ability already receives the target actor in its payload, so we can instead retrieve the `IPickupable` interface directly from here.
+Whatever the case, it's not very helpful to us. Fortunately, there is another way to get this information within our ability. Return to the `GA_Interaction_Collect` blueprint.
 
-Open your `IPickupable.h` header file and look for the UPickupableStatics class. Add the following as a public function declaration:
-```
-	UFUNCTION(BlueprintPure, meta = (WorldContext = "Ability"))
-	static TScriptInterface<IPickupable> GetIPickupableFromTargetObject(AActor* Target);
-```
+Assuming this ability is called correctly, the `Target` we receive in our `EventData` payload should be an actor implementing the `IPickupable` interface. This means that we can instead cast our `Target` actor to the `Pickubable` class (the lack of an `I` prefix is intentional) and instead pass that result to our `AddPickupInventory` call. The result should look something like this:  
 
-Next, open the `IPickupable.cpp` cpp file and add the following:
-```
-TScriptInterface<IPickupable> UPickupableStatics::GetIPickupableFromTargetObject(AActor* Target)
-{
-	// If the actor is directly pickupable, return that.
-	TScriptInterface<IPickupable> PickupableActor(Target);
-	if (PickupableActor)
-	{
-		return PickupableActor;
-	}
-
-	// If the actor isn't pickupable, it might have a component that has a pickupable interface.
-	TArray<UActorComponent*> PickupableComponents = Target ? Target->GetComponentsByInterface(UPickupable::StaticClass()) : TArray<UActorComponent*>();
-	if (PickupableComponents.Num() > 0)
-	{
-		ensureMsgf(PickupableComponents.Num() == 1, TEXT("We don't support multiple pickupable components yet."));
-
-		return TScriptInterface<IPickupable>(PickupableComponents[0]);
-	}
-
-	return TScriptInterface<IPickupable>();
-}
-```
-
-Finally, press compile.
-
-Once that's done, open up the `GA_Interaction_Collect` gameplay ability again and replace the `GetIPickupableFromActorInfo` node with our new `GetIPickupableFromTargetActor` node, giving it the `Target` from the `GameplayEventData` as an input. The result should look something like this:
-![image](https://user-images.githubusercontent.com/8943296/177227504-71c6200e-50fc-4d31-aa92-2ee403fa57aa.png)
+![image](https://user-images.githubusercontent.com/8943296/177438680-82ae9b0d-9404-4ee9-9ac7-1da88477e8f5.png)
 
 Now when you open the InventoryTestMap and collect a rock, open your inventory (default 'I') and you should notice you now have two green squares for items. One of these is your brand new rock.
 
@@ -181,7 +150,6 @@ Remember that Async task we use to listen to change events in the previous step?
 To resolve this open `W_InventoryGrid` and promote the `ListenForGameplayTask`'s `AsyncAction` pin to a variable. This stores a reference to the task. Then override the Destruct function of the widget and cancel that task. This will cause our task to be cleaned up every time the inventory is closed. The result should look something like this:  
 ![image](https://user-images.githubusercontent.com/8943296/177283644-3f842211-2e3e-4398-a3da-acd1fff181f7.png)  
 The same will need to be done to the `W_ItemAcquiredList` widget.
-
 
 ## 8. Item tiles in inventory don't have quantity
 Coming soon™
