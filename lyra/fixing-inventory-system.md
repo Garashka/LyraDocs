@@ -213,3 +213,6 @@ Now to test this, start your game and pick up an item. Note that items will not 
 # Limitations
 ## No manual re-ordering of tile widgets
 The `CommonTileView` widget doesn't appear to support manual ordering of widgets. This is going to be an issue for any inventory system that requires such behaviour (e.g. Factorio style).
+
+# Credits
+ - Shoptop of the Unreal Slackers Discord for providing a simple Blueprint-only solution to section 3.
